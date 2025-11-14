@@ -30,15 +30,110 @@ func NewGame(boardSize int, boatSizes []int) *Game {
 
 func (g *Game) placeBoatsRandomly(sizes []int) {
 	for i, size := range sizes {
-		boat := &models.Boat{
-			ID:          i,
-			Size:        size,
-			X:           0,
-			Y:           0,
-			Orientation: models.Horizontal,
-			HitCount:    0,
+		placed := false
+		attempts := 0
+		maxAttempts := 1000
+		
+		for !placed && attempts < maxAttempts {
+			attempts++
+			
+			orientation := models.Horizontal
+			if rand.Intn(2) == 1 {
+				orientation = models.Vertical
+			}
+			
+			var x, y int
+			if orientation == models.Horizontal {
+				x = rand.Intn(g.Board.Size - size + 1)
+				y = rand.Intn(g.Board.Size)
+			} else {
+				x = rand.Intn(g.Board.Size)
+				y = rand.Intn(g.Board.Size - size + 1)
+			}
+			
+			if g.canPlaceBoat(x, y, size, orientation) {
+				boat := &models.Boat{
+					ID:          i,
+					Size:        size,
+					X:           x,
+					Y:           y,
+					Orientation: orientation,
+					HitCount:    0,
+				}
+				g.Boats = append(g.Boats, boat)
+				
+				g.markBoatOnBoard(boat)
+				placed = true
+			}
 		}
-		g.Boats = append(g.Boats, boat)
+		
+		if !placed {
+			g.placeBoatAnywhere(i, size)
+		}
+	}
+}
+
+func (g *Game) canPlaceBoat(x, y, size int, orientation models.Orientation) bool {
+	for i := 0; i < size; i++ {
+		checkX := x
+		checkY := y
+		
+		if orientation == models.Horizontal {
+			checkX = x + i
+		} else {
+			checkY = y + i
+		}
+		
+		if !g.Board.IsValidPosition(checkX, checkY) {
+			return false
+		}
+		
+		if g.Board.Cells[checkY][checkX].HasBoat {
+			return false
+		}
+	}
+	return true
+}
+
+func (g *Game) markBoatOnBoard(boat *models.Boat) {
+	positions := boat.GetPositions()
+	for _, pos := range positions {
+		g.Board.Cells[pos.Y][pos.X].HasBoat = true
+		g.Board.Cells[pos.Y][pos.X].BoatID = boat.ID
+	}
+}
+
+func (g *Game) placeBoatAnywhere(id, size int) {
+	for y := 0; y < g.Board.Size; y++ {
+		for x := 0; x < g.Board.Size; x++ {
+			if g.canPlaceBoat(x, y, size, models.Horizontal) {
+				boat := &models.Boat{
+					ID:          id,
+					Size:        size,
+					X:           x,
+					Y:           y,
+					Orientation: models.Horizontal,
+					HitCount:    0,
+				}
+				g.Boats = append(g.Boats, boat)
+				g.markBoatOnBoard(boat)
+				return
+			}
+			
+			if g.canPlaceBoat(x, y, size, models.Vertical) {
+				boat := &models.Boat{
+					ID:          id,
+					Size:        size,
+					X:           x,
+					Y:           y,
+					Orientation: models.Vertical,
+					HitCount:    0,
+				}
+				g.Boats = append(g.Boats, boat)
+				g.markBoatOnBoard(boat)
+				return
+			}
+		}
 	}
 }
 
