@@ -13,6 +13,8 @@ import (
 type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
+	MaxRetries int
+	RetryDelay time.Duration
 }
 
 func NewClient(baseURL string) *Client {
@@ -21,7 +23,38 @@ func NewClient(baseURL string) *Client {
 		HTTPClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		MaxRetries: 3,
+		RetryDelay: 500 * time.Millisecond,
 	}
+}
+
+func (c *Client) retryRequest(fn func() error) error {
+	var lastErr error
+	for i := 0; i < c.MaxRetries; i++ {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		
+		if httpErr, ok := err.(*httpError); ok && httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 {
+			return err
+		}
+		
+		if i < c.MaxRetries-1 {
+			time.Sleep(c.RetryDelay)
+		}
+	}
+	return fmt.Errorf("échec après %d tentatives: %w", c.MaxRetries, lastErr)
+}
+
+type httpError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *httpError) Error() string {
+	return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Message)
 }
 
 func (c *Client) GetBoard() (*models.BoardResponse, error) {
@@ -44,49 +77,63 @@ func (c *Client) GetBoard() (*models.BoardResponse, error) {
 }
 
 func (c *Client) GetBoatsCount() (int, error) {
-	resp, err := c.HTTPClient.Get(c.BaseURL + "/boats")
+	var boats models.BoatsResponse
+	
+	err := c.retryRequest(func() error {
+		resp, err := c.HTTPClient.Get(c.BaseURL + "/boats")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != http.StatusOK {
+			return &httpError{StatusCode: resp.StatusCode, Message: "erreur serveur"}
+		}
+		
+		if err := json.NewDecoder(resp.Body).Decode(&boats); err != nil {
+			return fmt.Errorf("erreur décodage: %w", err)
+		}
+		
+		return nil
+	})
+	
 	if err != nil {
 		return 0, fmt.Errorf("erreur lors de la récupération des bateaux: %w", err)
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("erreur serveur: %d", resp.StatusCode)
-	}
-	
-	var boats models.BoatsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&boats); err != nil {
-		return 0, fmt.Errorf("erreur lors du décodage de la réponse: %w", err)
 	}
 	
 	return boats.RemainingBoats, nil
 }
 
 func (c *Client) Hit(x, y int) (*models.HitResponse, error) {
-	hitReq := models.HitRequest{
-		X: x,
-		Y: y,
-	}
+	var hitResp models.HitResponse
 	
+	hitReq := models.HitRequest{X: x, Y: y}
 	body, err := json.Marshal(hitReq)
 	if err != nil {
 		return nil, fmt.Errorf("erreur lors de la création de la requête: %w", err)
 	}
 	
-	resp, err := c.HTTPClient.Post(c.BaseURL+"/hit", "application/json", bytes.NewBuffer(body))
+	err = c.retryRequest(func() error {
+		resp, err := c.HTTPClient.Post(c.BaseURL+"/hit", "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return &httpError{StatusCode: resp.StatusCode, Message: string(bodyBytes)}
+		}
+		
+		if err := json.NewDecoder(resp.Body).Decode(&hitResp); err != nil {
+			return fmt.Errorf("erreur décodage: %w", err)
+		}
+		
+		return nil
+	})
+	
 	if err != nil {
 		return nil, fmt.Errorf("erreur lors de l'envoi du tir: %w", err)
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("erreur serveur: %d - %s", resp.StatusCode, string(bodyBytes))
-	}
-	
-	var hitResp models.HitResponse
-	if err := json.NewDecoder(resp.Body).Decode(&hitResp); err != nil {
-		return nil, fmt.Errorf("erreur lors du décodage de la réponse: %w", err)
 	}
 	
 	return &hitResp, nil
