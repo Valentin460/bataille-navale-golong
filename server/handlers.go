@@ -73,9 +73,37 @@ func (s *Server) HandleHits(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func (s *Server) HandleSpecialShot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	var req models.ShotRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	
+	if req.ShotType == "" {
+		req.ShotType = models.ShotNormal
+	}
+	
+	if !req.ShotType.IsValid() {
+		http.Error(w, "Invalid shot type", http.StatusBadRequest)
+		return
+	}
+	
+	response := s.Game.ProcessSpecialShot(req.X, req.Y, req.ShotType)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/board", s.HandleBoard)
 	mux.HandleFunc("/boats", s.HandleBoats)
 	mux.HandleFunc("/hit", s.HandleHit)
 	mux.HandleFunc("/hits", s.HandleHits)
+	mux.HandleFunc("/special-shot", s.HandleSpecialShot)
 }

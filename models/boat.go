@@ -23,6 +23,8 @@ type Boat struct {
 	Y           int
 	Orientation Orientation
 	HitCount    int
+	Paralyzed   bool
+	ParalyzedUntil int // Nombre de tours avant de pouvoir bouger à nouveau
 }
 
 func (b *Boat) IsAfloat() bool {

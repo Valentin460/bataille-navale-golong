@@ -165,3 +165,43 @@ func (c *Client) IsAlive() bool {
 	}
 	return boats > 0
 }
+
+func (c *Client) SpecialShot(x, y int, shotType models.ShotType) (*models.ShotResult, error) {
+	var shotResult models.ShotResult
+	
+	shotReq := models.ShotRequest{
+		X:        x,
+		Y:        y,
+		ShotType: shotType,
+	}
+	
+	body, err := json.Marshal(shotReq)
+	if err != nil {
+		return nil, fmt.Errorf("erreur lors de la création de la requête: %w", err)
+	}
+	
+	err = c.retryRequest(func() error {
+		resp, err := c.HTTPClient.Post(c.BaseURL+"/special-shot", "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return &httpError{StatusCode: resp.StatusCode, Message: string(bodyBytes)}
+		}
+		
+		if err := json.NewDecoder(resp.Body).Decode(&shotResult); err != nil {
+			return fmt.Errorf("erreur décodage: %w", err)
+		}
+		
+		return nil
+	})
+	
+	if err != nil {
+		return nil, fmt.Errorf("erreur lors de l'envoi du tir spécial: %w", err)
+	}
+	
+	return &shotResult, nil
+}
