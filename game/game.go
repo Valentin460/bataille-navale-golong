@@ -173,6 +173,8 @@ func (g *Game) ProcessHit(x, y int) models.HitResponse {
 		Result: result,
 	})
 	
+	g.moveAllBoats()
+	
 	return models.HitResponse{
 		Result: result,
 		X:      x,
@@ -229,4 +231,74 @@ func (g *Game) GetReceivedHits() models.HitsResponse {
 
 func (g *Game) IsAlive() bool {
 	return g.GetRemainingBoats() > 0
+}
+
+func (g *Game) moveAllBoats() {
+	for _, boat := range g.Boats {
+		if !boat.IsAfloat() {
+			continue // Ne pas déplacer les bateaux coulés
+		}
+		
+		// Choisir une direction aléatoire
+		directions := []models.Direction{models.North, models.South, models.East, models.West}
+		direction := directions[rand.Intn(len(directions))]
+		
+		newX, newY, valid := boat.TryMove(direction, g.Board.Size)
+		
+		if !valid {
+			continue // Mouvement invalide (hors limites)
+		}
+		
+		// Vérifier qu'il n'y a pas de collision avec un autre bateau
+		if g.canMoveBoatTo(boat, newX, newY) {
+			// Effacer l'ancienne position du plateau
+			g.clearBoatFromBoard(boat)
+			
+			// Déplacer le bateau
+			boat.Move(newX, newY)
+			
+			// Marquer la nouvelle position sur le plateau
+			g.markBoatOnBoard(boat)
+		}
+	}
+}
+
+func (g *Game) clearBoatFromBoard(boat *models.Boat) {
+	positions := boat.GetPositions()
+	for _, pos := range positions {
+		if !g.Board.Cells[pos.Y][pos.X].Revealed {
+			g.Board.Cells[pos.Y][pos.X].HasBoat = false
+			g.Board.Cells[pos.Y][pos.X].BoatID = -1
+		} else {
+			g.Board.Cells[pos.Y][pos.X].HasBoat = false
+			g.Board.Cells[pos.Y][pos.X].BoatID = -1
+		}
+	}
+}
+
+func (g *Game) canMoveBoatTo(boat *models.Boat, newX, newY int) bool {
+	tempBoat := &models.Boat{
+		ID:          boat.ID,
+		Size:        boat.Size,
+		X:           newX,
+		Y:           newY,
+		Orientation: boat.Orientation,
+	}
+	
+	// Vérifier les positions du bateau temporaire
+	positions := tempBoat.GetPositions()
+	for _, pos := range positions {
+		if !g.Board.IsValidPosition(pos.X, pos.Y) {
+			return false
+		}
+		
+		cell := g.Board.Cells[pos.Y][pos.X]
+		
+		// Si la case a un bateau qui n'est pas le bateau actuel, collision
+		if cell.HasBoat && cell.BoatID != boat.ID {
+			return false
+		}
+	}
+	
+	return true
 }
