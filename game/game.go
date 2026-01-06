@@ -173,6 +173,8 @@ func (g *Game) ProcessHit(x, y int) models.HitResponse {
 		Result: result,
 	})
 	
+	g.moveAllBoats()
+	
 	return models.HitResponse{
 		Result: result,
 		X:      x,
