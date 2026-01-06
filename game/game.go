@@ -230,3 +230,142 @@ func (g *Game) GetReceivedHits() models.HitsResponse {
 func (g *Game) IsAlive() bool {
 	return g.GetRemainingBoats() > 0
 }
+
+func (g *Game) moveAllBoats() {
+	for _, boat := range g.Boats {
+		if !boat.IsAfloat() {
+			continue // Ne pas déplacer les bateaux coulés
+		}
+		
+		if boat.Paralyzed {
+			boat.ParalyzedUntil--
+			if boat.ParalyzedUntil <= 0 {
+				boat.Paralyzed = false
+				boat.ParalyzedUntil = 0
+			}
+			continue // Le bateau paralysé ne bouge pas ce tour
+		}
+		
+		// Choisir une direction aléatoire
+		directions := []models.Direction{models.North, models.South, models.East, models.West}
+		direction := directions[rand.Intn(len(directions))]
+		
+		newX, newY, valid := boat.TryMove(direction, g.Board.Size)
+		
+		if !valid {
+			continue // Mouvement invalide (hors limites)
+		}
+		
+		// Vérifier qu'il n'y a pas de collision avec un autre bateau
+		if g.canMoveBoatTo(boat, newX, newY) {
+			// Effacer l'ancienne position du plateau
+			g.clearBoatFromBoard(boat)
+			
+			// Déplacer le bateau
+			boat.Move(newX, newY)
+			
+			// Marquer la nouvelle position sur le plateau
+			g.markBoatOnBoard(boat)
+		}
+	}
+}
+
+func (g *Game) clearBoatFromBoard(boat *models.Boat) {
+	positions := boat.GetPositions()
+	for _, pos := range positions {
+		if !g.Board.Cells[pos.Y][pos.X].Revealed {
+			g.Board.Cells[pos.Y][pos.X].HasBoat = false
+			g.Board.Cells[pos.Y][pos.X].BoatID = -1
+		} else {
+			g.Board.Cells[pos.Y][pos.X].HasBoat = false
+			g.Board.Cells[pos.Y][pos.X].BoatID = -1
+		}
+	}
+}
+
+func (g *Game) canMoveBoatTo(boat *models.Boat, newX, newY int) bool {
+	tempBoat := &models.Boat{
+		ID:          boat.ID,
+		Size:        boat.Size,
+		X:           newX,
+		Y:           newY,
+		Orientation: boat.Orientation,
+	}
+	
+	// Vérifier les positions du bateau temporaire
+	positions := tempBoat.GetPositions()
+	for _, pos := range positions {
+		if !g.Board.IsValidPosition(pos.X, pos.Y) {
+			return false
+		}
+		
+		cell := g.Board.Cells[pos.Y][pos.X]
+		
+		// Si la case a un bateau qui n'est pas le bateau actuel, collision
+		if cell.HasBoat && cell.BoatID != boat.ID {
+			return false
+		}
+	}
+	
+	return true
+}
+
+func (g *Game) ProcessSpecialShot(x, y int, shotType models.ShotType) models.ShotResult {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	
+	targetPositions := shotType.GetTargetPositions(x, y, g.Board.Size)
+	
+	hits := make([]models.HitResponse, 0)
+	totalHits := 0
+	
+	for _, pos := range targetPositions {
+		cell := &g.Board.Cells[pos.Y][pos.X]
+		cell.Revealed = true
+		
+		result := "miss"
+		if cell.HasBoat {
+			cell.State = models.Hit
+			result = "hit"
+			totalHits++
+			
+			// Mettre à jour le bateau touché
+			for _, boat := range g.Boats {
+				if boat.ID == cell.BoatID {
+					boat.HitCount++
+					
+					// BONUS: Si tir paralysant, paralyser le bateau
+					if shotType == models.ShotParalyzing {
+						boat.Paralyzed = true
+						boat.ParalyzedUntil = 3 // 3 tours
+					}
+					break
+				}
+			}
+		} else {
+			cell.State = models.Miss
+		}
+		
+		// Ajouter à l'historique
+		g.ReceivedHits = append(g.ReceivedHits, models.HitInfo{
+			X:      pos.X,
+			Y:      pos.Y,
+			Result: result,
+		})
+		
+		hits = append(hits, models.HitResponse{
+			Result: result,
+			X:      pos.X,
+			Y:      pos.Y,
+		})
+	}
+	
+	// Déplacer les bateaux après le tir (sauf les paralysés)
+	g.moveAllBoats()
+	
+	return models.ShotResult{
+		Hits:      hits,
+		ShotType:  shotType,
+		TotalHits: totalHits,
+	}
+}
