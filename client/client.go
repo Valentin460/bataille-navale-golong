@@ -205,3 +205,29 @@ func (c *Client) SpecialShot(x, y int, shotType models.ShotType) (*models.ShotRe
 	
 	return &shotResult, nil
 }
+
+// Register envoie une demande d'enregistrement mutuel à un adversaire
+func (c *Client) Register(myName, myURL string) error {
+	regReq := models.RegisterRequest{
+		Name: myName,
+		URL:  myURL,
+	}
+	
+	body, err := json.Marshal(regReq)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la création de la requête: %w", err)
+	}
+	
+	resp, err := c.HTTPClient.Post(c.BaseURL+"/register", "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("erreur lors de l'enregistrement: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("erreur serveur (%d): %s", resp.StatusCode, string(bodyBytes))
+	}
+	
+	return nil
+}

@@ -8,15 +8,20 @@ import (
 )
 
 type GameManager struct {
-	MyGame     *game.Game
-	Opponents  []*Opponent
-	mu         sync.RWMutex
-	stopUpdate chan bool
+	MyGame         *game.Game
+	MyName         string    // Nom du joueur local
+	MyURL          string    // URL du joueur local
+	Opponents      []*Opponent
+	mu             sync.RWMutex
+	stopUpdate     chan bool
+	OnNotification func(message string) // Callback pour afficher des notifications dans le CLI
 }
 
-func NewGameManager(myGame *game.Game) *GameManager {
+func NewGameManager(myGame *game.Game, myName, myURL string) *GameManager {
 	return &GameManager{
 		MyGame:     myGame,
+		MyName:     myName,
+		MyURL:      myURL,
 		Opponents:  make([]*Opponent, 0),
 		mu:         sync.RWMutex{},
 		stopUpdate: make(chan bool),
@@ -30,7 +35,42 @@ func (gm *GameManager) AddOpponent(name, url string) {
 	opponent := NewOpponent(name, url)
 	gm.Opponents = append(gm.Opponents, opponent)
 	
+	// Mise à jour initiale du statut
 	go opponent.UpdateStatus()
+	
+	// Enregistrement mutuel : notifier l'adversaire qu'on l'a ajouté
+	go func() {
+		time.Sleep(500 * time.Millisecond) // Petit délai pour que le serveur soit prêt
+		err := opponent.Client.Register(gm.MyName, gm.MyURL)
+		if err != nil {
+			// Enregistrement échoué, mais ce n'est pas critique
+			fmt.Printf("⚠️  Échec de l'enregistrement mutuel avec %s: %v\n", name, err)
+		}
+	}()
+}
+
+// AddOpponentFromRegister ajoute un adversaire suite à une demande /register
+func (gm *GameManager) AddOpponentFromRegister(name, url string) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	
+	// Vérifier si l'adversaire existe déjà
+	for _, opp := range gm.Opponents {
+		if opp.Name == name {
+			return // Déjà présent
+		}
+	}
+	
+	opponent := NewOpponent(name, url)
+	gm.Opponents = append(gm.Opponents, opponent)
+	
+	go opponent.UpdateStatus()
+	
+	// Notifier le CLI
+	if gm.OnNotification != nil {
+		msg := fmt.Sprintf("🔔 Joueur '%s' vous a ajouté! Tapez 'list' pour voir.", name)
+		gm.OnNotification(msg)
+	}
 }
 
 func (gm *GameManager) RemoveOpponent(name string) bool {

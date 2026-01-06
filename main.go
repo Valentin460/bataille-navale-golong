@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -21,38 +22,63 @@ const (
 var (
 	port      = flag.Int("port", DefaultPort, "Port du serveur HTTP")
 	opponents = flag.String("opponents", "", "Liste des adresses des adversaires (séparées par des virgules)")
+	name      = flag.String("name", "", "Nom du joueur (optionnel, généré automatiquement si vide)")
 )
 
 func main() {
 	flag.Parse()
 	
+	// Générer un nom unique si non fourni
+	playerName := *name
+	if playerName == "" {
+		playerName = fmt.Sprintf("player%d", time.Now().Unix()%10000)
+	}
+	
+	myURL := fmt.Sprintf("http://localhost:%d", *port)
+	
 	boatSizes := []int{5, 4, 3, 3, 2}
 	
 	g := game.NewGame(DefaultBoardSize, boatSizes)
 	
-	go startServer(g, *port)
+	gm := multiplayer.NewGameManager(g, playerName, myURL)
 	
-	gm := multiplayer.NewGameManager(g)
+	// Démarrer le serveur HTTP
+	s := server.NewServer(g)
 	
+	// Connecter le callback pour recevoir les enregistrements mutuels
+	s.OnOpponentAdded = func(oppName, oppURL string) {
+		gm.AddOpponentFromRegister(oppName, oppURL)
+	}
+	
+	go startServer(s, *port)
+	
+	// Ajouter les adversaires de la ligne de commande
 	if *opponents != "" {
 		opponentsList := strings.Split(*opponents, ",")
 		for i, addr := range opponentsList {
 			addr = strings.TrimSpace(addr)
 			if addr != "" {
-				name := fmt.Sprintf("player%d", i+1)
-				gm.AddOpponent(name, addr)
+				oppName := fmt.Sprintf("player%d", i+1)
+				gm.AddOpponent(oppName, addr)
 			}
 		}
 	}
 	
 	cli.ShowWelcome(*port)
+	fmt.Printf("👤 Votre nom de joueur: %s\n", playerName)
 	
 	interactiveCLI := cli.NewInteractiveCLI(gm)
+	
+	// Connecter le callback pour afficher les notifications
+	gm.OnNotification = func(msg string) {
+		fmt.Println("\n" + msg)
+		fmt.Print("\n> ") // Re-afficher le prompt
+	}
+	
 	interactiveCLI.Start()
 }
 
-func startServer(g *game.Game, port int) {
-	s := server.NewServer(g)
+func startServer(s *server.Server, port int) {
 	mux := http.NewServeMux()
 	s.SetupRoutes(mux)
 	

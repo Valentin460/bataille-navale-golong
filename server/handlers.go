@@ -3,12 +3,12 @@ package server
 import (
 	"bataille-navale/game"
 	"bataille-navale/models"
-	"encoding/json"
 	"net/http"
 )
 
 type Server struct {
 	Game *game.Game
+	OnOpponentAdded func(name, url string) // Callback pour notifier le CLI
 }
 
 func NewServer(g *game.Game) *Server {
@@ -19,19 +19,17 @@ func NewServer(g *game.Game) *Server {
 
 func (s *Server) HandleBoard(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 	
 	state := s.Game.GetBoardState()
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(state)
+	RespondJSON(w, http.StatusOK, state)
 }
 
 func (s *Server) HandleBoats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 	
@@ -39,65 +37,111 @@ func (s *Server) HandleBoats(w http.ResponseWriter, r *http.Request) {
 		RemainingBoats: s.Game.GetRemainingBoats(),
 	}
 	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	RespondJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) HandleHit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 	
 	var req models.HitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if err := DecodeAndValidate(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	
+	// Validation des coordonnées
+	if err := ValidateCoordinates(req.X, req.Y, s.Game.Board.Size); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	
 	response := s.Game.ProcessHit(req.X, req.Y)
 	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	RespondJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) HandleHits(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 	
 	response := s.Game.GetReceivedHits()
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	RespondJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) HandleSpecialShot(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 	
 	var req models.ShotRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if err := DecodeAndValidate(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	
+	// Validation des coordonnées
+	if err := ValidateCoordinates(req.X, req.Y, s.Game.Board.Size); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	
+	// Validation du type de tir
 	if req.ShotType == "" {
 		req.ShotType = models.ShotNormal
 	}
 	
 	if !req.ShotType.IsValid() {
-		http.Error(w, "Invalid shot type", http.StatusBadRequest)
+		RespondError(w, http.StatusBadRequest, "Invalid shot type")
 		return
 	}
 	
 	response := s.Game.ProcessSpecialShot(req.X, req.Y, req.ShotType)
 	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	RespondJSON(w, http.StatusOK, response)
+}
+
+// HandleRegister permet à un adversaire de s'enregistrer mutuellement
+func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	
+	var req models.RegisterRequest
+	if err := DecodeAndValidate(r, &req); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	
+	// Validation des champs
+	if req.Name == "" {
+		RespondError(w, http.StatusBadRequest, "Name is required")
+		return
+	}
+	if req.URL == "" {
+		RespondError(w, http.StatusBadRequest, "URL is required")
+		return
+	}
+	
+	// Notifier le CLI pour ajouter l'adversaire
+	if s.OnOpponentAdded != nil {
+		s.OnOpponentAdded(req.Name, req.URL)
+	}
+	
+	RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Opponent registered successfully",
+	})
+}
+
+// Handle404 gère les routes inexistantes
+func (s *Server) Handle404(w http.ResponseWriter, r *http.Request) {
+	RespondError(w, http.StatusNotFound, "Route not found: "+r.URL.Path)
 }
 
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
@@ -106,4 +150,17 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/hit", s.HandleHit)
 	mux.HandleFunc("/hits", s.HandleHits)
 	mux.HandleFunc("/special-shot", s.HandleSpecialShot)
+	mux.HandleFunc("/register", s.HandleRegister)
+	
+	// Handler 404 pour toutes les autres routes
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			s.Handle404(w, r)
+		} else {
+			RespondJSON(w, http.StatusOK, map[string]string{
+				"message": "Bataille Navale Server",
+				"version": "1.0.0",
+			})
+		}
+	})
 }
