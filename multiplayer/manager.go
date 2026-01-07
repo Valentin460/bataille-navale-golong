@@ -162,7 +162,7 @@ func (gm *GameManager) FireAt(opponentName string, x, y int) (*string, error) {
 	
 	if !opponent.IsAlive() {
 		msg := fmt.Sprintf("L'adversaire %s est éliminé ou injoignable", opponentName)
-		return &msg, fmt.Errorf(msg)
+		return &msg, fmt.Errorf("%s", msg)
 	}
 	
 	resp, err := opponent.Hit(x, y)

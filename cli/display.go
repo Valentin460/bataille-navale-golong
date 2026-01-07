@@ -23,6 +23,7 @@ func DisplayOpponents(opponents []*multiplayer.Opponent) {
 			i+1, 
 			symbol,
 			padRight(opp.Name+" - "+status, 35),
+			"",
 		)
 	}
 	fmt.Println("└────────────────────────────────────────┘")
@@ -59,9 +60,9 @@ func DisplayGameStatus(gm *multiplayer.GameManager) {
 		myStatusSymbol = ColorRed + SymbolDefeated + ColorReset
 		myStatus = "Éliminé"
 	}
-	fmt.Printf("║ Moi: %s %s%s║\n", myStatusSymbol, padRight(myStatus, 41))
-	fmt.Printf("║ Mes bateaux: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetMyBoatsRemaining()), 39))
-	fmt.Printf("║ Tirs reçus: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetReceivedHitsCount()), 40))
+	fmt.Printf("║ Moi: %s %s%s║\n", myStatusSymbol, padRight(myStatus, 41), "")
+	fmt.Printf("║ Mes bateaux: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetMyBoatsRemaining()), 39), "")
+	fmt.Printf("║ Tirs reçus: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetReceivedHitsCount()), 40), "")
 	
 	fmt.Println("╠════════════════════════════════════════════════════════╣")
 	

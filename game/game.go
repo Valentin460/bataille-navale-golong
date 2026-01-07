@@ -8,19 +8,21 @@ import (
 )
 
 type Game struct {
-	Board         *models.Board
-	Boats         []*models.Boat
-	ReceivedHits  []models.HitInfo
-	mu            sync.RWMutex
+	Board           *models.Board
+	Boats           []*models.Boat
+	ReceivedHits    []models.HitInfo
+	DisableMovement bool // Pour les tests: désactive le mouvement des bateaux
+	mu              sync.RWMutex
 }
 
 func NewGame(boardSize int, boatSizes []int) *Game {
 	rand.Seed(time.Now().UnixNano())
 	
 	game := &Game{
-		Board:        models.NewBoard(boardSize),
-		Boats:        make([]*models.Boat, 0),
-		ReceivedHits: make([]models.HitInfo, 0),
+		Board:           models.NewBoard(boardSize),
+		Boats:           make([]*models.Boat, 0),
+		ReceivedHits:    make([]models.HitInfo, 0),
+		DisableMovement: false, // Par défaut, les bateaux bougent
 	}
 	
 	game.placeBoatsRandomly(boatSizes)
@@ -173,7 +175,10 @@ func (g *Game) ProcessHit(x, y int) models.HitResponse {
 		Result: result,
 	})
 	
-	g.moveAllBoats()
+	// Déplacer les bateaux seulement si pas en mode test
+	if !g.DisableMovement {
+		g.moveAllBoats()
+	}
 	
 	return models.HitResponse{
 		Result: result,
@@ -362,8 +367,10 @@ func (g *Game) ProcessSpecialShot(x, y int, shotType models.ShotType) models.Sho
 		})
 	}
 	
-	// Déplacer les bateaux après le tir (sauf les paralysés)
-	g.moveAllBoats()
+	// Déplacer les bateaux après le tir (sauf les paralysés), seulement si pas en mode test
+	if !g.DisableMovement {
+		g.moveAllBoats()
+	}
 	
 	return models.ShotResult{
 		Hits:      hits,
