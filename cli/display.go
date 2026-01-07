@@ -23,6 +23,7 @@ func DisplayOpponents(opponents []*multiplayer.Opponent) {
 			i+1, 
 			symbol,
 			padRight(opp.Name+" - "+status, 35),
+			"",
 		)
 	}
 	fmt.Println("└────────────────────────────────────────┘")
@@ -59,9 +60,9 @@ func DisplayGameStatus(gm *multiplayer.GameManager) {
 		myStatusSymbol = ColorRed + SymbolDefeated + ColorReset
 		myStatus = "Éliminé"
 	}
-	fmt.Printf("║ Moi: %s %s%s║\n", myStatusSymbol, padRight(myStatus, 41))
-	fmt.Printf("║ Mes bateaux: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetMyBoatsRemaining()), 39))
-	fmt.Printf("║ Tirs reçus: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetReceivedHitsCount()), 40))
+	fmt.Printf("║ Moi: %s %s%s║\n", myStatusSymbol, padRight(myStatus, 41), "")
+	fmt.Printf("║ Mes bateaux: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetMyBoatsRemaining()), 39), "")
+	fmt.Printf("║ Tirs reçus: %s%s║\n", padRight(fmt.Sprintf("%d", gm.GetReceivedHitsCount()), 40), "")
 	
 	fmt.Println("╠════════════════════════════════════════════════════════╣")
 	
@@ -88,8 +89,8 @@ func DisplayGameStatus(gm *multiplayer.GameManager) {
 }
 
 func DisplayMenu() {
-	fmt.Println("\n┌──────────────── COMMANDES ────────────────┐")
-	fmt.Println("│ fire [opp] [x] [y] - Tirer sur adversaire │")
+	fmt.Println("\n┌──────────────── COMMANDES ───────────────┐")
+	fmt.Println("│ fire [opp] [x] [y] - Tirer sur adversaire  │")
 	fmt.Println("│ list               - Liste des adversaires │")
 	fmt.Println("│ status             - État du jeu           │")
 	fmt.Println("│ board [opp]        - Voir plateau adverse  │")
@@ -127,12 +128,12 @@ func padRight(s string, length int) string {
 
 func ShowWelcome(port int) {
 	fmt.Println("\n╔════════════════════════════════════════════════════════╗")
-	fmt.Println("║          BATAILLE NAVALE - JEU EN TEMPS RÉEL          ║")
+	fmt.Println("║          BATAILLE NAVALE - JEU EN TEMPS RÉEL           ║")
 	fmt.Println("╠════════════════════════════════════════════════════════╣")
 	fmt.Printf("║ Serveur HTTP actif sur le port: %d%s║\n", port, padRight("", 18))
-	fmt.Println("║ Votre plateau a été généré aléatoirement              ║")
-	fmt.Println("║ Vous pouvez tirer sur vos adversaires à tout moment  ║")
-	fmt.Println("║ Tapez 'help' pour voir les commandes disponibles     ║")
+	fmt.Println("║ Votre plateau a été généré aléatoirement               ║")
+	fmt.Println("║ Vous pouvez tirer sur vos adversaires à tout moment    ║")
+	fmt.Println("║ Tapez 'help' pour voir les commandes disponibles       ║")
 	fmt.Println("╚════════════════════════════════════════════════════════╝")
 }
 
